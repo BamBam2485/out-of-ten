@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -277,6 +278,7 @@
         <button class="guess-btn" onclick="showGuess('statement')">🎯 Guess the rating now</button>
       </div>
     </div>
+    <div id="live-statements" style="width:100%;margin-top:0.5rem;max-height:160px;overflow-y:auto;"></div>
   </div>
 
   <!-- ── DISCUSSION ─────────────────────────────────────────────────── -->
@@ -353,7 +355,7 @@ const ac = i => COLORS[i % COLORS.length];
 let me = { id: null, code: null, isHost: false, isImpostor: false, rating: null, roleRevealed: false };
 let lobby = null;
 let timer = null;
-let timeLeft = 90;
+let timeLeft = 60;
 let selectedVote = -1;
 let selectedGuess = -1;
 let guessFrom = null;
@@ -449,6 +451,11 @@ function renderRevealDots(done, total) {
 
 // ── Statement phase ────────────────────────────────────────────────────────
 function setupStatementTurn(data) {
+  // Clear live statements at start of first turn
+  if (data.playerIndex === 0) {
+    const list = $('live-statements');
+    if (list) list.innerHTML = '';
+  }
   const isMyTurn = data.playerId === me.id;
   const pct = (data.playerIndex / lobby.playerCount) * 100;
   $('stmt-progress').style.width = pct + '%';
@@ -465,7 +472,7 @@ function setupStatementTurn(data) {
 
 function startTimer(active) {
   clearInterval(timer);
-  timeLeft = 90;
+  timeLeft = 60;
   updateTimer();
   timer = setInterval(() => {
     timeLeft--;
@@ -481,7 +488,7 @@ function updateTimer() {
   $('timer-val').textContent = timeLeft;
   const pct = timeLeft / 60;
   $('timer-circle').style.strokeDashoffset = 213.6 * (1 - pct);
-  $('timer-circle').style.stroke = timeLeft <= 10 ? '#ef4444' : '#7c3aed';
+  $('timer-circle').style.stroke = timeLeft <= 15 ? '#ef4444' : '#7c3aed';
 }
 
 function submitStatement() {
@@ -628,7 +635,7 @@ socket.on('lobby:joined', ({ code, playerId }) => {
 });
 
 socket.on('lobby:update', (data) => {
- const prevState = lobby ? lobby.state : null;
+  const prevState = lobby ? lobby.state : null;
   lobby = data;
   me.isHost = lobby.hostId === me.id;
 
@@ -678,6 +685,22 @@ socket.on('game:revealProgress', ({ done, total }) => {
 
 socket.on('game:statementTurn', (data) => {
   setupStatementTurn(data);
+});
+
+socket.on('game:newStatement', (statement) => {
+  const list = $('live-statements');
+  if (!list) return;
+  const div = document.createElement('div');
+  div.className = 'stmt-item';
+  div.innerHTML = `<div class="stmt-player-name">${statement.name}</div><div class="stmt-text">${statement.text}</div>`;
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+});
+
+socket.on('game:aborted', ({ reason }) => {
+  clearInterval(timer);
+  toast(reason);
+  setTimeout(() => showScreen('lobby'), 2500);
 });
 
 socket.on('player:left', ({ name }) => {
