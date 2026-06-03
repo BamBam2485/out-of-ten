@@ -219,6 +219,15 @@
           <button class="counter-btn" onclick="setImpostors(1)">+</button>
         </div>
       </div>
+      <div class="counter-row" style="margin-top:4px;">
+        <span style="font-size:14px;color:#ccc;">Hints for Impostor</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span id="hints-label" style="font-size:13px;color:var(--text-muted);">Off</span>
+          <div id="hints-toggle" onclick="toggleHints()" style="width:44px;height:24px;border-radius:12px;background:var(--border);cursor:pointer;position:relative;transition:background 0.2s;">
+            <div id="hints-knob" style="width:20px;height:20px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;"></div>
+          </div>
+        </div>
+      </div>
       <button class="btn btn-primary" id="start-btn" onclick="startGame()">Start game</button>
       <div id="start-error" style="color:var(--red);font-size:12px;min-height:16px;text-align:center;"></div>
     </div>
@@ -400,6 +409,24 @@ function startGame() {
   socket.emit('game:start');
 }
 
+function toggleHints() {
+  if (!lobby || !me.isHost) return;
+  const newVal = !lobby.hintsEnabled;
+  socket.emit('lobby:setHints', { enabled: newVal });
+}
+
+function updateHintsToggle() {
+  if (!lobby) return;
+  const on = lobby.hintsEnabled;
+  const toggle = $('hints-toggle');
+  const knob = $('hints-knob');
+  const label = $('hints-label');
+  if (!toggle) return;
+  toggle.style.background = on ? '#7c3aed' : 'var(--border)';
+  knob.style.left = on ? '22px' : '2px';
+  label.textContent = on ? 'On' : 'Off';
+}
+
 // ── Render lobby waiting room ──────────────────────────────────────────────
 function renderLobby() {
   if (!lobby) return;
@@ -424,6 +451,7 @@ function renderLobby() {
   });
   $('host-controls').style.display = me.isHost ? 'block' : 'none';
   $('guest-waiting').style.display = me.isHost ? 'none' : 'block';
+  updateHintsToggle();
 }
 
 // ── Role reveal ────────────────────────────────────────────────────────────
@@ -660,14 +688,24 @@ socket.on('lobby:update', (data) => {
   }
 });
 
-socket.on('game:role', ({ isImpostor, rating, teammates }) => {
+socket.on('game:role', ({ isImpostor, rating, teammates, hint }) => {
+  // Clear any old hint elements
+  const oldHint = $('role-content').querySelector('.hint-el');
+  if (oldHint) oldHint.remove();
   me.isImpostor = isImpostor;
   me.rating = rating;
   $('role-title').textContent = isImpostor ? 'Impostor' : 'Crewmate';
   if (isImpostor) {
-    $('role-sub').textContent = teammates.length > 0
+    let subText = teammates.length > 0
       ? `Blend in. Guess the rating to win. Fellow Impostor: ${teammates.join(', ')}.`
       : 'Blend in. Guess the rating to win.';
+    $('role-sub').textContent = subText;
+    if (hint) {
+      const hintEl = document.createElement('div');
+      hintEl.style.cssText = 'margin-top:12px;background:#1a1a2e;border:1.5px solid #7c3aed;border-radius:10px;padding:10px 14px;font-size:13px;color:#a78bfa;';
+      hintEl.innerHTML = `💡 Hint: ${hint}`;
+      $('role-content').appendChild(hintEl);
+    }
     $('role-rating').style.display = 'none';
   } else {
     $('role-sub').textContent = 'Give clues. Find the Impostor.';
