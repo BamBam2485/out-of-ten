@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Out of Ten</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --purple: #7c3aed;
+    --purple-light: #a78bfa;
+    --purple-dark: #5b21b6;
+    --bg: #0d0d1a;
+    --surface: #1a1a2e;
+    --surface2: #16213e;
+    --text: #ffffff;
+    --text-muted: #888888;
+    --text-dim: #555555;
+    --red: #ef4444;
+    --red-bg: #7f1d1d;
+    --green: #22c55e;
+    --gold: #fbbf24;
+    --border: #2a2a3e;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --radius-full: 50px;
+  }
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; }
+  #app { height: 100vh; display: flex; flex-direction: column; max-width: 420px; margin: 0 auto; position: relative; overflow: hidden; }
+  .screen { display: none; flex-direction: column; align-items: center; padding: 2rem 1.25rem 1.5rem; height: 100%; overflow-y: auto; }
+  .screen.active { display: flex; }
+
+  /* Buttons */
+  .btn { width: 100%; padding: 15px; border-radius: var(--radius-full); font-size: 15px; font-weight: 600; cursor: pointer; border: none; margin-bottom: 10px; letter-spacing: 0.2px; transition: transform 0.1s, opacity 0.1s; -webkit-tap-highlight-color: transparent; }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--purple); color: #fff; }
+  .btn-secondary { background: transparent; border: 1.5px solid var(--border); color: #ccc; }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-ghost { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 8px 0; }
+
+  /* Cards / surfaces */
+  .card { background: var(--surface); border-radius: var(--radius-lg); padding: 1rem 1.25rem; width: 100%; margin-bottom: 8px; }
+  .card-bordered { border: 1.5px solid var(--border); }
+
+  /* Typography */
+  .page-title { font-size: 18px; font-weight: 600; margin-bottom: 1.25rem; align-self: flex-start; }
+  .label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; align-self: flex-start; }
+  .muted { color: var(--text-muted); font-size: 13px; }
+
+  /* Input */
+  .text-input { width: 100%; background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 13px 14px; color: #fff; font-size: 15px; font-family: inherit; outline: none; margin-bottom: 10px; }
+  .text-input:focus { border-color: var(--purple); }
+  .text-input::placeholder { color: var(--text-dim); }
+
+  /* Home screen */
+  .logo-mark { font-size: 60px; margin-bottom: 1rem; }
+  .logo-text { font-size: 38px; font-weight: 700; letter-spacing: -1.5px; margin-bottom: 4px; }
+  .logo-text span { color: var(--purple-light); }
+  .tagline { font-size: 13px; color: var(--text-muted); margin-bottom: 3rem; }
+
+  /* Lobby code display */
+  .code-display { background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; text-align: center; margin-bottom: 1.5rem; }
+  .code-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .code-value { font-size: 42px; font-weight: 700; letter-spacing: 8px; color: var(--purple-light); }
+
+  /* Player list in lobby */
+  .player-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 6px; width: 100%; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+  .player-row-name { font-size: 14px; flex: 1; }
+  .host-badge { font-size: 10px; background: var(--purple); color: #fff; padding: 2px 8px; border-radius: 20px; letter-spacing: 0.5px; }
+  .you-badge { font-size: 10px; background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); padding: 2px 8px; border-radius: 20px; }
+
+  /* Counter */
+  .counter-row { display: flex; align-items: center; justify-content: space-between; width: 100%; background: var(--surface); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 8px; }
+  .counter-controls { display: flex; align-items: center; gap: 14px; }
+  .counter-btn { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--border); background: transparent; color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
+  .counter-val { font-size: 16px; font-weight: 600; min-width: 20px; text-align: center; }
+
+  /* Role reveal card */
+  .role-card { width: 100%; background: var(--surface); border: 2px solid var(--purple); border-radius: var(--radius-lg); padding: 2rem 1.5rem; text-align: center; position: relative; cursor: pointer; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
+  .role-mask { position: absolute; inset: 0; background: var(--surface); display: flex; align-items: center; justify-content: center; border-radius: 14px; z-index: 2; }
+  .role-mask-text { font-size: 13px; color: var(--text-dim); }
+  .role-title { font-size: 30px; font-weight: 700; color: var(--purple-light); margin-bottom: 8px; }
+  .role-sub { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+  .rating-reveal { background: var(--bg); border-radius: var(--radius); padding: 1rem 1.5rem; margin-top: 1rem; }
+  .rating-big { font-size: 52px; font-weight: 700; color: var(--purple-light); line-height: 1; }
+  .rating-small-label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* Waiting for reveals */
+  .reveal-progress { text-align: center; width: 100%; }
+  .reveal-count { font-size: 48px; font-weight: 700; color: var(--purple-light); }
+  .reveal-total { font-size: 18px; color: var(--text-muted); }
+  .dot-row { display: flex; gap: 8px; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+  .dot.done { background: var(--purple); }
+
+  /* Statement phase */
+  .turn-banner { background: var(--surface); border-radius: var(--radius); padding: 12px 16px; width: 100%; text-align: center; margin-bottom: 1rem; }
+  .turn-name { font-size: 18px; font-weight: 600; color: var(--purple-light); }
+  .turn-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
+  .timer-wrap { position: relative; width: 80px; height: 80px; margin: 0 auto 1rem; }
+  .timer-wrap svg { transform: rotate(-90deg); }
+  .timer-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; }
+  .stmt-textarea { width: 100%; background: var(--surface); border: none; border-radius: var(--radius); padding: 14px; color: #fff; font-size: 14px; resize: none; outline: none; font-family: inherit; line-height: 1.6; min-height: 90px; margin-bottom: 10px; }
+  .stmt-textarea::placeholder { color: var(--text-dim); }
+  .waiting-banner { background: var(--surface2); border-radius: var(--radius); padding: 1.5rem; width: 100%; text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 1rem; }
+  .guess-btn { width: 100%; padding: 13px; background: var(--red-bg); border: 1.5px solid var(--red); border-radius: var(--radius-full); color: #fca5a5; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+  .progress-bar { width: 100%; height: 3px; background: var(--surface); border-radius: 2px; margin-bottom: 1.5rem; flex-shrink: 0; }
+  .progress-fill { height: 100%; background: var(--purple); border-radius: 2px; transition: width 0.4s; }
+
+  /* Statements list */
+  .stmt-item { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 6px; width: 100%; }
+  .stmt-player-name { font-size: 11px; color: var(--purple-light); font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 4px; }
+  .stmt-text { font-size: 14px; color: #ccc; line-height: 1.5; }
+
+  /* Voting */
+  .vote-grid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1rem; }
+  .vote-card { background: var(--surface); border-radius: var(--radius); padding: 14px 10px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s; -webkit-tap-highlight-color: transparent; }
+  .vote-card.selected { border-color: var(--purple); }
+  .vote-card.voted { border-color: var(--text-dim); opacity: 0.6; }
+  .vote-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; margin: 0 auto 8px; }
+  .vote-name { font-size: 13px; color: #ccc; }
+  .vote-tally { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  /* Guess modal */
+  .guess-overlay { background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; margin-bottom: 1rem; }
+  .num-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 1rem 0; }
+  .num-btn { padding: 11px 4px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; color: #ccc; font-size: 15px; font-weight: 600; cursor: pointer; transition: border-color 0.1s; }
+  .num-btn.selected { border-color: var(--red); color: var(--red); background: #1f0a0a; }
+
+  /* Result */
+  .result-wrap { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; width: 100%; }
+  .result-emoji { font-size: 64px; margin-bottom: 1rem; }
+  .result-eyebrow { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .result-headline { font-size: 30px; font-weight: 700; margin-bottom: 6px; }
+  .result-headline.impostor { color: var(--red); }
+  .result-headline.crew { color: var(--purple-light); }
+  .result-detail { font-size: 14px; color: var(--text-muted); margin-bottom: 6px; }
+  .result-detail span { color: var(--gold); font-weight: 600; }
+  .divider { width: 100%; height: 1px; background: var(--border); margin: 1rem 0; }
+
+  /* Toast */
+  #toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%) translateY(-80px); background: #1f2937; color: #fff; padding: 10px 18px; border-radius: var(--radius-full); font-size: 13px; transition: transform 0.3s; z-index: 999; white-space: nowrap; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── HOME ──────────────────────────────────────────────────────── -->
+  <div id="screen-home" class="screen active" style="justify-content:center;">
+    <div class="logo-mark">🎯</div>
+    <div class="logo-text">Out of <span>Ten</span></div>
+    <div class="tagline">A party game of ratings & deception</div>
+    <button class="btn btn-primary" onclick="showScreen('create')">Create a lobby</button>
+    <button class="btn btn-secondary" onclick="showScreen('join')">Join a lobby</button>
+    <button class="btn-ghost" onclick="showScreen('howto')">How to play</button>
+  </div>
+
+  <!-- ── HOW TO PLAY ────────────────────────────────────────────────── -->
+  <div id="screen-howto" class="screen">
+    <button class="btn-ghost" onclick="showScreen('home')" style="align-self:flex-start;margin-bottom:1rem;">← Back</button>
+    <div class="page-title">How to play</div>
+    <div class="stmt-item"><div class="stmt-player-name">Step 1 — Join a lobby</div><div class="stmt-text">One person creates a lobby and shares the 4-letter code. Everyone joins on their own phone.</div></div>
+    <div class="stmt-item"><div class="stmt-player-name">Step 2 — Roles are assigned</div><div class="stmt-text">Everyone gets a secret rating (1–10). One player is the Impostor — they don't see the rating.</div></div>
+    <div class="stmt-item"><div class="stmt-player-name">Step 3 — Statements</div><div class="stmt-text">Take turns typing a statement that fits the rating. 30 seconds each. The Impostor has to bluff.</div></div>
+    <div class="stmt-item"><div class="stmt-player-name">Step 4 — Vote</div><div class="stmt-text">Discuss, then vote on who you think is the Impostor. Wrong vote = Impostor wins.</div></div>
+    <div class="stmt-item" style="border:1.5px solid #7f1d1d;">
+      <div class="stmt-player-name" style="color:var(--red);">Impostor special rule</div>
+      <div class="stmt-text">At ANY point — during statements, discussion, or vote — the Impostor can guess the exact rating. Correct = instant win. Wrong = instant loss.</div>
+    </div>
+    <div style="height:1rem;"></div>
+    <button class="btn btn-primary" onclick="showScreen('home')">Got it</button>
+  </div>
+
+  <!-- ── CREATE LOBBY ───────────────────────────────────────────────── -->
+  <div id="screen-create" class="screen">
+    <button class="btn-ghost" onclick="showScreen('home')" style="align-self:flex-start;margin-bottom:1rem;">← Back</button>
+    <div class="page-title">Create a lobby</div>
+    <div class="label">Your name</div>
+    <input id="create-name" class="text-input" placeholder="Enter your name" maxlength="20" />
+    <button class="btn btn-primary" onclick="createLobby()">Create lobby</button>
+  </div>
+
+  <!-- ── JOIN LOBBY ─────────────────────────────────────────────────── -->
+  <div id="screen-join" class="screen">
+    <button class="btn-ghost" onclick="showScreen('home')" style="align-self:flex-start;margin-bottom:1rem;">← Back</button>
+    <div class="page-title">Join a lobby</div>
+    <div class="label">Your name</div>
+    <input id="join-name" class="text-input" placeholder="Enter your name" maxlength="20" />
+    <div class="label">Lobby code</div>
+    <input id="join-code" class="text-input" placeholder="e.g. XKQZ" maxlength="4" style="text-transform:uppercase;letter-spacing:4px;font-size:20px;font-weight:700;" oninput="this.value=this.value.toUpperCase()" />
+    <button class="btn btn-primary" onclick="joinLobby()">Join</button>
+  </div>
+
+  <!-- ── LOBBY WAITING ROOM ─────────────────────────────────────────── -->
+  <div id="screen-lobby" class="screen">
+    <div class="code-display">
+      <div class="code-label">Lobby code</div>
+      <div class="code-value" id="lobby-code-display">----</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">Share this code with your friends</div>
+    </div>
+    <div class="label">Players (<span id="lobby-player-count">0</span>/10)</div>
+    <div id="lobby-player-list" style="width:100%;margin-bottom:1rem;"></div>
+    <div id="host-controls" style="display:none;width:100%;">
+      <div class="divider"></div>
+      <div class="counter-row">
+        <span style="font-size:14px;color:#ccc;">Impostors</span>
+        <div class="counter-controls">
+          <button class="counter-btn" onclick="setImpostors(-1)">−</button>
+          <span class="counter-val" id="impostor-count-display">1</span>
+          <button class="counter-btn" onclick="setImpostors(1)">+</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="start-btn" onclick="startGame()">Start game</button>
+      <div id="start-error" style="color:var(--red);font-size:12px;min-height:16px;text-align:center;"></div>
+    </div>
+    <div id="guest-waiting" style="display:none;width:100%;text-align:center;">
+      <div class="muted">Waiting for host to start the game…</div>
+    </div>
+  </div>
+
+  <!-- ── ROLE REVEAL ────────────────────────────────────────────────── -->
+  <div id="screen-reveal" class="screen">
+    <div class="page-title" style="align-self:center;">Your role</div>
+    <div class="muted" style="margin-bottom:1.5rem;text-align:center;">Tap the card to reveal — make sure nobody else can see your screen.</div>
+    <div id="role-card" class="role-card" onclick="revealRole()">
+      <div id="role-mask" class="role-mask">
+        <div class="role-mask-text">Tap to reveal</div>
+      </div>
+      <div id="role-content">
+        <div id="role-title" class="role-title"></div>
+        <div id="role-sub" class="role-sub"></div>
+        <div id="role-rating" class="rating-reveal" style="display:none;">
+          <div id="role-rating-num" class="rating-big"></div>
+          <div class="rating-small-label">the rating</div>
+        </div>
+      </div>
+    </div>
+    <div id="waiting-others" style="display:none;width:100%;text-align:center;margin-bottom:1rem;">
+      <div class="muted">Waiting for others…</div>
+      <div class="dot-row" id="reveal-dots"></div>
+    </div>
+    <button class="btn btn-primary" id="role-confirm-btn" onclick="confirmRole()" style="display:none;">Got it — I'm ready</button>
+  </div>
+
+  <!-- ── STATEMENT PHASE ────────────────────────────────────────────── -->
+  <div id="screen-statement" class="screen">
+    <div class="progress-bar"><div class="progress-fill" id="stmt-progress"></div></div>
+    <div class="turn-banner">
+      <div class="turn-sub" id="stmt-sub-label">Now giving a statement</div>
+      <div class="turn-name" id="stmt-turn-name"></div>
+    </div>
+    <div class="timer-wrap">
+      <svg width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="var(--surface)" stroke-width="6"/>
+        <circle id="timer-circle" cx="40" cy="40" r="34" fill="none" stroke="var(--purple)" stroke-width="6" stroke-dasharray="213.6" stroke-dashoffset="0" stroke-linecap="round"/>
+      </svg>
+      <div class="timer-val" id="timer-val">30</div>
+    </div>
+    <div id="my-turn-area" style="display:none;width:100%;">
+      <div id="impostor-guess-stmt" style="display:none;">
+        <button class="guess-btn" onclick="showGuess('statement')">🎯 Guess the rating now</button>
+      </div>
+      <textarea class="stmt-textarea" id="stmt-input" placeholder="Type your statement…" maxlength="200"></textarea>
+      <button class="btn btn-primary" onclick="submitStatement()">Submit</button>
+    </div>
+    <div id="not-my-turn-area" style="display:none;width:100%;">
+      <div class="waiting-banner" id="waiting-for-label">Waiting for player…</div>
+      <div id="impostor-guess-waiting" style="display:none;">
+        <button class="guess-btn" onclick="showGuess('statement')">🎯 Guess the rating now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DISCUSSION ─────────────────────────────────────────────────── -->
+  <div id="screen-discussion" class="screen">
+    <div class="page-title">All statements</div>
+    <div class="muted" style="margin-bottom:1rem;text-align:center;">Discuss with your group, then vote.</div>
+    <div id="discussion-statements" style="width:100%;margin-bottom:1rem;"></div>
+    <div id="impostor-guess-discussion" style="display:none;width:100%;margin-bottom:8px;">
+      <button class="guess-btn" onclick="showGuess('discussion')">🎯 Guess the rating</button>
+    </div>
+    <div id="host-vote-btn-wrap" style="display:none;width:100%;margin-top:auto;">
+      <button class="btn btn-primary" onclick="startVote()">Start voting</button>
+    </div>
+    <div id="guest-vote-wait" style="display:none;width:100%;margin-top:auto;text-align:center;">
+      <div class="muted">Waiting for host to start voting…</div>
+    </div>
+  </div>
+
+  <!-- ── GUESS SCREEN ───────────────────────────────────────────────── -->
+  <div id="screen-guess" class="screen">
+    <div class="page-title" style="align-self:center;">Guess the rating</div>
+    <div class="muted" style="text-align:center;margin-bottom:1.5rem;">One shot. Right = instant win. Wrong = instant loss.</div>
+    <div class="guess-overlay">
+      <div style="font-size:15px;font-weight:600;text-align:center;margin-bottom:4px;">What is the rating?</div>
+      <div class="num-grid" id="num-grid"></div>
+    </div>
+    <button class="btn btn-danger" id="confirm-guess-btn" onclick="confirmGuess()" disabled>Confirm guess</button>
+    <button class="btn btn-secondary" onclick="cancelGuess()">Cancel</button>
+  </div>
+
+  <!-- ── VOTE ───────────────────────────────────────────────────────── -->
+  <div id="screen-vote" class="screen">
+    <div class="page-title" style="align-self:center;">Who is the Impostor?</div>
+    <div class="muted" style="margin-bottom:1rem;text-align:center;" id="vote-sub">Tap a player to vote.</div>
+    <div id="vote-grid" class="vote-grid"></div>
+    <div id="impostor-guess-vote" style="display:none;width:100%;margin-bottom:8px;">
+      <button class="guess-btn" onclick="showGuess('vote')">🎯 Guess instead of voting</button>
+    </div>
+    <div id="vote-status" style="font-size:13px;color:var(--text-muted);text-align:center;margin-bottom:8px;"></div>
+    <button class="btn btn-danger" id="vote-confirm-btn" onclick="confirmVote()" disabled>Confirm vote</button>
+  </div>
+
+  <!-- ── RESULT ─────────────────────────────────────────────────────── -->
+  <div id="screen-result" class="screen" style="justify-content:center;">
+    <div class="result-wrap">
+      <div class="result-emoji" id="result-emoji"></div>
+      <div class="result-eyebrow" id="result-eyebrow"></div>
+      <div class="result-headline" id="result-headline"></div>
+      <div class="result-detail" id="result-detail1"></div>
+      <div class="result-detail" id="result-detail2"></div>
+    </div>
+    <div style="width:100%;margin-top:1rem;">
+      <div id="host-play-again" style="display:none;">
+        <button class="btn btn-primary" onclick="playAgain()">Play again</button>
+      </div>
+      <div id="guest-play-again" style="display:none;">
+        <div class="muted" style="text-align:center;margin-bottom:10px;">Waiting for host…</div>
+      </div>
+      <button class="btn btn-secondary" onclick="leaveGame()">Leave game</button>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const $ = id => document.getElementById(id);
+const COLORS = ['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2','#9333ea','#65a30d','#e11d48','#ca8a04'];
+const ac = i => COLORS[i % COLORS.length];
+
+let me = { id: null, code: null, isHost: false, isImpostor: false, rating: null, roleRevealed: false };
+let lobby = null;
+let timer = null;
+let timeLeft = 30;
+let selectedVote = -1;
+let selectedGuess = -1;
+let guessFrom = null;
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('screen-' + id).classList.add('active');
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── Create / Join ──────────────────────────────────────────────────────────
+function createLobby() {
+  const name = $('create-name').value.trim();
+  if (!name) { toast('Enter your name first'); return; }
+  socket.emit('lobby:create', { name });
+}
+
+function joinLobby() {
+  const name = $('join-name').value.trim();
+  const code = $('join-code').value.trim().toUpperCase();
+  if (!name) { toast('Enter your name first'); return; }
+  if (code.length !== 4) { toast('Enter a 4-letter code'); return; }
+  socket.emit('lobby:join', { name, code });
+}
+
+// ── Lobby controls ─────────────────────────────────────────────────────────
+function setImpostors(d) {
+  if (!lobby) return;
+  const cur = lobby.impostorCount || 1;
+  socket.emit('lobby:setImpostors', { count: cur + d });
+}
+
+function startGame() {
+  $('start-error').textContent = '';
+  socket.emit('game:start');
+}
+
+// ── Render lobby waiting room ──────────────────────────────────────────────
+function renderLobby() {
+  if (!lobby) return;
+  $('lobby-code-display').textContent = lobby.code;
+  $('lobby-player-count').textContent = lobby.playerCount;
+  $('impostor-count-display').textContent = lobby.impostorCount;
+  const list = $('lobby-player-list');
+  list.innerHTML = '';
+  lobby.players.forEach((p, i) => {
+    const isMe = p.id === me.id;
+    const isHost = p.id === lobby.hostId;
+    const row = document.createElement('div');
+    row.className = 'player-row';
+    row.innerHTML = `
+      <div class="avatar" style="background:${ac(i)}">${p.name[0].toUpperCase()}</div>
+      <span class="player-row-name">${p.name}</span>
+      ${isHost ? '<span class="host-badge">Host</span>' : ''}
+      ${isMe && !isHost ? '<span class="you-badge">You</span>' : ''}
+      ${isMe && isHost ? '<span class="you-badge">You</span>' : ''}
+    `;
+    list.appendChild(row);
+  });
+  $('host-controls').style.display = me.isHost ? 'block' : 'none';
+  $('guest-waiting').style.display = me.isHost ? 'none' : 'block';
+}
+
+// ── Role reveal ────────────────────────────────────────────────────────────
+function revealRole() {
+  $('role-mask').style.display = 'none';
+  $('role-confirm-btn').style.display = 'block';
+}
+
+function confirmRole() {
+  $('role-confirm-btn').style.display = 'none';
+  $('waiting-others').style.display = 'block';
+  socket.emit('game:roleConfirmed');
+}
+
+function renderRevealDots(done, total) {
+  const row = $('reveal-dots');
+  row.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i < done ? ' done' : '');
+    row.appendChild(d);
+  }
+  $('reveal-dots').parentElement.querySelector('.muted') && null;
+}
+
+// ── Statement phase ────────────────────────────────────────────────────────
+function setupStatementTurn(data) {
+  const isMyTurn = data.playerId === me.id;
+  const pct = (data.playerIndex / lobby.playerCount) * 100;
+  $('stmt-progress').style.width = pct + '%';
+  $('stmt-turn-name').textContent = data.playerName;
+  $('stmt-sub-label').textContent = isMyTurn ? 'Your turn' : 'Giving a statement';
+  $('my-turn-area').style.display = isMyTurn ? 'block' : 'none';
+  $('not-my-turn-area').style.display = isMyTurn ? 'none' : 'block';
+  $('impostor-guess-stmt').style.display = (isMyTurn && me.isImpostor) ? 'block' : 'none';
+  $('impostor-guess-waiting').style.display = (!isMyTurn && me.isImpostor) ? 'block' : 'none';
+  if (!isMyTurn) $('waiting-for-label').textContent = `Waiting for ${data.playerName}…`;
+  $('stmt-input').value = '';
+  startTimer(isMyTurn);
+}
+
+function startTimer(active) {
+  clearInterval(timer);
+  timeLeft = 30;
+  updateTimer();
+  timer = setInterval(() => {
+    timeLeft--;
+    updateTimer();
+    if (timeLeft <= 0) {
+      clearInterval(timer);
+      if (active) submitStatement();
+    }
+  }, 1000);
+}
+
+function updateTimer() {
+  $('timer-val').textContent = timeLeft;
+  const pct = timeLeft / 30;
+  $('timer-circle').style.strokeDashoffset = 213.6 * (1 - pct);
+  $('timer-circle').style.stroke = timeLeft <= 10 ? '#ef4444' : '#7c3aed';
+}
+
+function submitStatement() {
+  clearInterval(timer);
+  const text = $('stmt-input').value.trim();
+  socket.emit('game:submitStatement', { text });
+}
+
+// ── Guess ──────────────────────────────────────────────────────────────────
+function showGuess(from) {
+  clearInterval(timer);
+  guessFrom = from;
+  selectedGuess = -1;
+  const grid = $('num-grid');
+  grid.innerHTML = '';
+  for (let n = 1; n <= 10; n++) {
+    const btn = document.createElement('button');
+    btn.className = 'num-btn';
+    btn.textContent = n;
+    btn.onclick = () => {
+      selectedGuess = n;
+      document.querySelectorAll('.num-btn').forEach((b, i) => b.classList.toggle('selected', i + 1 === n));
+      $('confirm-guess-btn').disabled = false;
+    };
+    grid.appendChild(btn);
+  }
+  $('confirm-guess-btn').disabled = true;
+  showScreen('guess');
+}
+
+function confirmGuess() {
+  if (selectedGuess < 0) return;
+  socket.emit('game:guess', { guess: selectedGuess });
+}
+
+function cancelGuess() {
+  if (guessFrom === 'discussion') { showScreen('discussion'); return; }
+  if (guessFrom === 'vote') { showScreen('vote'); return; }
+  showScreen('statement');
+}
+
+// ── Discussion ─────────────────────────────────────────────────────────────
+function renderDiscussion() {
+  const list = $('discussion-statements');
+  list.innerHTML = '';
+  if (!lobby.statements) return;
+  lobby.statements.forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'stmt-item';
+    div.innerHTML = `<div class="stmt-player-name">${s.name}</div><div class="stmt-text">${s.text}</div>`;
+    list.appendChild(div);
+  });
+  $('impostor-guess-discussion').style.display = me.isImpostor ? 'block' : 'none';
+  $('host-vote-btn-wrap').style.display = me.isHost ? 'block' : 'none';
+  $('guest-vote-wait').style.display = me.isHost ? 'none' : 'block';
+}
+
+function startVote() {
+  socket.emit('game:startVote');
+}
+
+// ── Vote ───────────────────────────────────────────────────────────────────
+function renderVote() {
+  selectedVote = -1;
+  const grid = $('vote-grid');
+  grid.innerHTML = '';
+  lobby.players.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'vote-card';
+    const myVote = lobby.votes && lobby.votes[me.id];
+    if (myVote !== undefined) card.classList.add('voted');
+    card.innerHTML = `
+      <div class="vote-avatar" style="background:${ac(i)}33;color:${ac(i)}">${p.name[0].toUpperCase()}</div>
+      <div class="vote-name">${p.name}</div>
+      <div class="vote-tally" id="vtally-${i}"></div>
+    `;
+    card.onclick = () => {
+      if (lobby.votes && lobby.votes[me.id] !== undefined) return;
+      selectedVote = i;
+      document.querySelectorAll('.vote-card').forEach((c, idx) => c.classList.toggle('selected', idx === i));
+      $('vote-confirm-btn').disabled = false;
+    };
+    grid.appendChild(card);
+  });
+  const voteCount = lobby.votes ? Object.keys(lobby.votes).length : 0;
+  $('vote-status').textContent = `${voteCount} / ${lobby.playerCount} votes in`;
+  $('vote-confirm-btn').disabled = true;
+  $('impostor-guess-vote').style.display = me.isImpostor ? 'block' : 'none';
+  const alreadyVoted = lobby.votes && lobby.votes[me.id] !== undefined;
+  $('vote-confirm-btn').textContent = alreadyVoted ? 'Vote submitted ✓' : 'Confirm vote';
+  $('vote-confirm-btn').disabled = alreadyVoted;
+}
+
+function confirmVote() {
+  if (selectedVote < 0) return;
+  socket.emit('game:vote', { targetIndex: selectedVote });
+  $('vote-confirm-btn').textContent = 'Vote submitted ✓';
+  $('vote-confirm-btn').disabled = true;
+}
+
+// ── Result ─────────────────────────────────────────────────────────────────
+function renderResult(result) {
+  const map = {
+    impostor_guess_correct: { emoji: '🎯', eyebrow: 'Impostor wins!', cls: 'impostor', headline: `${result.impostorNames} guessed it` },
+    impostor_guess_wrong:   { emoji: '💥', eyebrow: 'Crewmates win!', cls: 'crew',     headline: 'Wrong guess — Impostor eliminated' },
+    crew_wins:              { emoji: '🕵️', eyebrow: 'Crewmates win!', cls: 'crew',     headline: `${result.impostorNames} was the Impostor` },
+    impostor_survives:      { emoji: '😈', eyebrow: 'Impostor wins!', cls: 'impostor', headline: `${result.impostorNames} survived the vote` },
+  };
+  const r = map[result.type];
+  $('result-emoji').textContent = r.emoji;
+  $('result-eyebrow').textContent = r.eyebrow;
+  $('result-headline').textContent = r.headline;
+  $('result-headline').className = 'result-headline ' + r.cls;
+  $('result-detail1').innerHTML = `The rating was <span>${result.rating}/10</span>`;
+  if (result.type === 'impostor_guess_wrong') {
+    $('result-detail2').innerHTML = `Impostor guessed <span>${result.guessedRating}/10</span>`;
+  } else if (result.wasTie) {
+    $('result-detail2').textContent = 'Tie broken by random spin';
+  } else if (result.votedOutName) {
+    $('result-detail2').textContent = `${result.votedOutName} was voted out`;
+  } else {
+    $('result-detail2').textContent = '';
+  }
+  $('host-play-again').style.display = me.isHost ? 'block' : 'none';
+  $('guest-play-again').style.display = me.isHost ? 'none' : 'block';
+}
+
+function playAgain() { socket.emit('game:playAgain'); }
+function leaveGame() {
+  me = { id: null, code: null, isHost: false, isImpostor: false, rating: null, roleRevealed: false };
+  lobby = null;
+  showScreen('home');
+  socket.disconnect();
+  setTimeout(() => location.reload(), 100);
+}
+
+// ── Socket events ──────────────────────────────────────────────────────────
+socket.on('connect', () => { me.id = socket.id; });
+
+socket.on('lobby:joined', ({ code, playerId }) => {
+  me.id = playerId;
+  me.code = code;
+  showScreen('lobby');
+});
+
+socket.on('lobby:update', (data) => {
+  lobby = data;
+  me.isHost = lobby.hostId === me.id;
+
+  if (lobby.state === 'waiting') {
+    renderLobby();
+    showScreen('lobby');
+  } else if (lobby.state === 'reveal') {
+    showScreen('reveal');
+  } else if (lobby.state === 'statement') {
+    showScreen('statement');
+  } else if (lobby.state === 'discussion') {
+    clearInterval(timer);
+    renderDiscussion();
+    showScreen('discussion');
+  } else if (lobby.state === 'vote') {
+    renderVote();
+    showScreen('vote');
+  } else if (lobby.state === 'result' && lobby.result) {
+    clearInterval(timer);
+    renderResult(lobby.result);
+    showScreen('result');
+  }
+});
+
+socket.on('game:role', ({ isImpostor, rating, teammates }) => {
+  me.isImpostor = isImpostor;
+  me.rating = rating;
+  $('role-title').textContent = isImpostor ? 'Impostor' : 'Crewmate';
+  if (isImpostor) {
+    $('role-sub').textContent = teammates.length > 0
+      ? `Blend in. Guess the rating to win. Fellow Impostor: ${teammates.join(', ')}.`
+      : 'Blend in. Guess the rating to win.';
+    $('role-rating').style.display = 'none';
+  } else {
+    $('role-sub').textContent = 'Give clues. Find the Impostor.';
+    $('role-rating-num').textContent = rating + '/10';
+    $('role-rating').style.display = 'block';
+  }
+  $('role-mask').style.display = 'flex';
+  $('role-confirm-btn').style.display = 'none';
+  $('waiting-others').style.display = 'none';
+});
+
+socket.on('game:revealProgress', ({ done, total }) => {
+  renderRevealDots(done, total);
+});
+
+socket.on('game:statementTurn', (data) => {
+  setupStatementTurn(data);
+});
+
+socket.on('player:left', ({ name }) => {
+  toast(`${name} disconnected`);
+});
+
+socket.on('error', (msg) => {
+  toast(msg);
+  if (msg.includes('Lobby not found') || msg.includes('already in progress')) {
+    $('start-error') && ($('start-error').textContent = msg);
+  }
+});
+</script>
+</body>
+</html>
