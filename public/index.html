@@ -353,7 +353,7 @@ const ac = i => COLORS[i % COLORS.length];
 let me = { id: null, code: null, isHost: false, isImpostor: false, rating: null, roleRevealed: false };
 let lobby = null;
 let timer = null;
-let timeLeft = 30;
+let timeLeft = 90;
 let selectedVote = -1;
 let selectedGuess = -1;
 let guessFrom = null;
@@ -465,7 +465,7 @@ function setupStatementTurn(data) {
 
 function startTimer(active) {
   clearInterval(timer);
-  timeLeft = 30;
+  timeLeft = 90;
   updateTimer();
   timer = setInterval(() => {
     timeLeft--;
@@ -479,7 +479,7 @@ function startTimer(active) {
 
 function updateTimer() {
   $('timer-val').textContent = timeLeft;
-  const pct = timeLeft / 30;
+  const pct = timeLeft / 60;
   $('timer-circle').style.strokeDashoffset = 213.6 * (1 - pct);
   $('timer-circle').style.stroke = timeLeft <= 10 ? '#ef4444' : '#7c3aed';
 }
@@ -628,6 +628,7 @@ socket.on('lobby:joined', ({ code, playerId }) => {
 });
 
 socket.on('lobby:update', (data) => {
+ const prevState = lobby ? lobby.state : null;
   lobby = data;
   me.isHost = lobby.hostId === me.id;
 
@@ -637,7 +638,7 @@ socket.on('lobby:update', (data) => {
   } else if (lobby.state === 'reveal') {
     showScreen('reveal');
   } else if (lobby.state === 'statement') {
-    showScreen('statement');
+    if (prevState !== 'statement') showScreen('statement');
   } else if (lobby.state === 'discussion') {
     clearInterval(timer);
     renderDiscussion();
