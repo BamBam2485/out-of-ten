@@ -35,6 +35,7 @@ function sanitizeLobby(lobby) {
     hostId: lobby.hostId,
     players: lobby.players.map(p => ({ id: p.id, name: p.name, ready: p.ready })),
     impostorCount: lobby.impostorCount,
+    hintsEnabled: lobby.hintsEnabled,
     state: lobby.state,
     statements: lobby.statements,
     currentTurn: lobby.currentTurn,
@@ -76,6 +77,7 @@ io.on('connection', (socket) => {
       hostId: socket.id,
       players: [{ id: socket.id, name: name || 'Host', ready: false }],
       impostorCount: 1,
+      hintsEnabled: false,
       state: 'waiting',
       rating: 0,
       impostorIndices: [],
@@ -111,6 +113,13 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
+  socket.on('lobby:setHints', ({ enabled }) => {
+    const lobby = getLobbyForSocket(socket.id);
+    if (!lobby || lobby.hostId !== socket.id) return;
+    lobby.hintsEnabled = !!enabled;
+    broadcastLobby(lobby);
+  });
+
   socket.on('game:start', () => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.hostId !== socket.id) return;
@@ -128,6 +137,12 @@ io.on('connection', (socket) => {
     lobby.revealsDone = 0;
     lobby.result = null;
 
+    // Generate hint for impostor if enabled
+    let hint = null;
+    if (lobby.hintsEnabled) {
+      hint = lobby.rating % 2 === 0 ? 'The rating is an even number' : 'The rating is an odd number';
+    }
+
     lobby.players.forEach((player, i) => {
       const isImpostor = lobby.impostorIndices.includes(i);
       const teammates = lobby.impostorIndices.filter(x => x !== i).map(x => lobby.players[x].name);
@@ -135,6 +150,7 @@ io.on('connection', (socket) => {
         isImpostor,
         rating: isImpostor ? null : lobby.rating,
         teammates: isImpostor ? teammates : [],
+        hint: isImpostor ? hint : null,
       });
     });
 
@@ -239,6 +255,7 @@ io.on('connection', (socket) => {
     lobby.result = null;
     lobby.impostorIndices = [];
     lobby.revealsDone = 0;
+    // keep hintsEnabled as-is so host doesn't have to re-toggle
     broadcastLobby(lobby);
   });
 
