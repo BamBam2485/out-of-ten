@@ -9,15 +9,10 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── Lobby storage ──────────────────────────────────────────────────────────
-// lobbies[code] = {
-//   code, hostId, players: [{id, name, ready}],
-//   impostorCount, state: 'waiting'|'reveal'|'statement'|'discussion'|'vote'|'result',
-//   rating, impostorIndices, statements: [{playerIndex, name, text}],
-//   currentTurn, votes: {[voterId]: targetIndex}, revealsDone,
-//   result: null | { type, impostorNames, rating, guessedRating }
-// }
 const lobbies = {};
+
+// Track recent ratings per lobby to avoid repeats
+const recentRatings = {};
 
 function generateCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -35,7 +30,6 @@ function broadcastLobby(lobby) {
 }
 
 function sanitizeLobby(lobby) {
-  // Never send impostorIndices or rating to clients directly
   return {
     code: lobby.code,
     hostId: lobby.hostId,
@@ -50,9 +44,31 @@ function sanitizeLobby(lobby) {
   };
 }
 
+// Pick a rating that wasn't used in the last 3 rounds
+function pickRating(code) {
+  const recent = recentRatings[code] || [];
+  let rating;
+  let attempts = 0;
+  do {
+    rating = Math.floor(Math.random() * 10) + 1;
+    attempts++;
+  } while (recent.includes(rating) && attempts < 20);
+  recentRatings[code] = [...recent.slice(-2), rating];
+  return rating;
+}
+
+// Shuffle array properly
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 io.on('connection', (socket) => {
 
-  // ── Create lobby ──────────────────────────────────────────────────────────
   socket.on('lobby:create', ({ name }) => {
     const code = generateCode();
     const lobby = {
@@ -75,7 +91,6 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
-  // ── Join lobby ────────────────────────────────────────────────────────────
   socket.on('lobby:join', ({ code, name }) => {
     const lobby = lobbies[code.toUpperCase()];
     if (!lobby) { socket.emit('error', 'Lobby not found.'); return; }
@@ -88,7 +103,6 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
-  // ── Set impostor count ────────────────────────────────────────────────────
   socket.on('lobby:setImpostors', ({ count }) => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.hostId !== socket.id) return;
@@ -97,19 +111,16 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
-  // ── Start game ────────────────────────────────────────────────────────────
   socket.on('game:start', () => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.hostId !== socket.id) return;
     if (lobby.players.length < 3) { socket.emit('error', 'Need at least 3 players.'); return; }
 
-    lobby.rating = Math.floor(Math.random() * 10) + 1;
-    const indices = [...Array(lobby.players.length).keys()];
-    lobby.impostorIndices = [];
-    for (let i = 0; i < lobby.impostorCount; i++) {
-      const r = Math.floor(Math.random() * indices.length);
-      lobby.impostorIndices.push(indices.splice(r, 1)[0]);
-    }
+    // Fix: use proper shuffle so host isn't always impostor
+    lobby.rating = pickRating(lobby.code);
+    const shuffled = shuffle([...Array(lobby.players.length).keys()]);
+    lobby.impostorIndices = shuffled.slice(0, lobby.impostorCount);
+
     lobby.state = 'reveal';
     lobby.statements = [];
     lobby.currentTurn = 0;
@@ -117,7 +128,6 @@ io.on('connection', (socket) => {
     lobby.revealsDone = 0;
     lobby.result = null;
 
-    // Send each player their private role
     lobby.players.forEach((player, i) => {
       const isImpostor = lobby.impostorIndices.includes(i);
       const teammates = lobby.impostorIndices.filter(x => x !== i).map(x => lobby.players[x].name);
@@ -131,7 +141,6 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
-  // ── Player confirms they've seen their role ───────────────────────────────
   socket.on('game:roleConfirmed', () => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.state !== 'reveal') return;
@@ -152,18 +161,21 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ── Submit statement ──────────────────────────────────────────────────────
   socket.on('game:submitStatement', ({ text }) => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.state !== 'statement') return;
     const playerIndex = lobby.players.findIndex(p => p.id === socket.id);
     if (playerIndex !== lobby.currentTurn) return;
 
-    lobby.statements.push({
+    const statement = {
       playerIndex,
       name: lobby.players[playerIndex].name,
       text: (text || '').trim() || '(no statement)',
-    });
+    };
+    lobby.statements.push(statement);
+
+    // Broadcast the new statement to everyone immediately
+    io.to(lobby.code).emit('game:newStatement', statement);
 
     lobby.currentTurn++;
     if (lobby.currentTurn >= lobby.players.length) {
@@ -179,7 +191,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ── Impostor guess ────────────────────────────────────────────────────────
   socket.on('game:guess', ({ guess }) => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby) return;
@@ -199,7 +210,6 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
-  // ── Start vote phase ──────────────────────────────────────────────────────
   socket.on('game:startVote', () => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.state !== 'discussion') return;
@@ -208,7 +218,6 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
-  // ── Submit vote ───────────────────────────────────────────────────────────
   socket.on('game:vote', ({ targetIndex }) => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.state !== 'vote') return;
@@ -216,14 +225,11 @@ io.on('connection', (socket) => {
     if (playerIndex < 0) return;
     lobby.votes[socket.id] = targetIndex;
     broadcastLobby(lobby);
-
-    // Check if all players have voted
     if (Object.keys(lobby.votes).length >= lobby.players.length) {
       resolveVote(lobby);
     }
   });
 
-  // ── Play again ────────────────────────────────────────────────────────────
   socket.on('game:playAgain', () => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby || lobby.hostId !== socket.id) return;
@@ -236,18 +242,42 @@ io.on('connection', (socket) => {
     broadcastLobby(lobby);
   });
 
-  // ── Disconnect ────────────────────────────────────────────────────────────
   socket.on('disconnect', () => {
     const lobby = getLobbyForSocket(socket.id);
     if (!lobby) return;
+
+    const playerName = lobby.players.find(p => p.id === socket.id)?.name || 'A player';
     lobby.players = lobby.players.filter(p => p.id !== socket.id);
+
     if (lobby.players.length === 0) {
       delete lobbies[lobby.code];
+      delete recentRatings[lobby.code];
       return;
     }
+
     if (lobby.hostId === socket.id) lobby.hostId = lobby.players[0].id;
-    broadcastLobby(lobby);
-    io.to(lobby.code).emit('player:left', { name: 'A player' });
+
+    // If game is mid-round, end it gracefully rather than crashing
+    if (['reveal', 'statement', 'discussion', 'vote'].includes(lobby.state)) {
+      if (lobby.players.length < 2) {
+        // Not enough players to continue
+        lobby.state = 'waiting';
+        lobby.statements = [];
+        lobby.votes = {};
+        lobby.result = null;
+        lobby.impostorIndices = [];
+        lobby.revealsDone = 0;
+        broadcastLobby(lobby);
+        io.to(lobby.code).emit('game:aborted', { reason: `${playerName} left — not enough players to continue.` });
+      } else {
+        // Enough players — notify and continue if possible
+        io.to(lobby.code).emit('player:left', { name: playerName });
+        broadcastLobby(lobby);
+      }
+    } else {
+      broadcastLobby(lobby);
+      io.to(lobby.code).emit('player:left', { name: playerName });
+    }
   });
 });
 
@@ -266,7 +296,7 @@ function resolveVote(lobby) {
     type: isImpostor ? 'crew_wins' : 'impostor_survives',
     impostorNames,
     rating: lobby.rating,
-    votedOutName: lobby.players[votedOutIndex].name,
+    votedOutName: lobby.players[votedOutIndex] ? lobby.players[votedOutIndex].name : 'Unknown',
     wasTie: tied.length > 1,
   };
   lobby.state = 'result';
