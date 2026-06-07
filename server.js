@@ -125,7 +125,9 @@ io.on('connection', (socket) => {
     if (!lobby || lobby.hostId !== socket.id) return;
     if (lobby.players.length < 3) { socket.emit('error', 'Need at least 3 players.'); return; }
 
-    // Fix: use proper shuffle so host isn't always impostor
+    // Shuffle player order for each game
+    lobby.players = shuffle(lobby.players);
+
     lobby.rating = pickRating(lobby.code);
     const shuffled = shuffle([...Array(lobby.players.length).keys()]);
     lobby.impostorIndices = shuffled.slice(0, lobby.impostorCount);
