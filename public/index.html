@@ -353,6 +353,17 @@
 
 <div id="toast"></div>
 
+<!-- ── KICK VOTE MODAL ─────────────────────────────────────────────── -->
+<div id="kick-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:none;align-items:center;justify-content:center;padding:1.5rem;">
+  <div style="background:#1a1a2e;border-radius:16px;padding:1.5rem;width:100%;max-width:360px;border:1.5px solid #2a2a3e;">
+    <div style="font-size:16px;font-weight:600;margin-bottom:6px;" id="kick-modal-title">Player disconnected</div>
+    <div style="font-size:13px;color:#888;margin-bottom:1rem;" id="kick-modal-sub">Waiting for them to reconnect…</div>
+    <div style="background:#0d0d1a;border-radius:10px;padding:10px 14px;margin-bottom:1rem;font-size:13px;color:#a78bfa;" id="kick-vote-count">0 / 0 voted to continue</div>
+    <button class="btn btn-danger" id="kick-vote-btn" onclick="voteToKick()" style="margin-bottom:8px;">Continue without them</button>
+    <button class="btn btn-secondary" onclick="dismissKickModal()">Wait for them</button>
+  </div>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
 const socket = io();
@@ -385,6 +396,7 @@ function toast(msg) {
 function createLobby() {
   const name = $('create-name').value.trim();
   if (!name) { toast('Enter your name first'); return; }
+  sessionStorage.setItem('oot_name', name);
   socket.emit('lobby:create', { name });
 }
 
@@ -393,7 +405,9 @@ function joinLobby() {
   const code = $('join-code').value.trim().toUpperCase();
   if (!name) { toast('Enter your name first'); return; }
   if (code.length !== 4) { toast('Enter a 4-letter code'); return; }
-  socket.emit('lobby:join', { name, code });
+  sessionStorage.setItem('oot_name', name);
+  sessionStorage.setItem('oot_code', code);
+  socket.emit('lobby:rejoin', { name, code });
 }
 
 // ── Lobby controls ─────────────────────────────────────────────────────────
@@ -645,6 +659,8 @@ function renderResult(result) {
 
 function playAgain() { socket.emit('game:playAgain'); }
 function leaveGame() {
+  sessionStorage.removeItem('oot_name');
+  sessionStorage.removeItem('oot_code');
   me = { id: null, code: null, isHost: false, isImpostor: false, rating: null, roleRevealed: false };
   lobby = null;
   showScreen('home');
@@ -652,12 +668,44 @@ function leaveGame() {
   setTimeout(() => location.reload(), 100);
 }
 
+// ── Kick vote ─────────────────────────────────────────────────────────────
+let kickTarget = null;
+
+function showKickModal(playerName) {
+  kickTarget = playerName;
+  $('kick-modal-title').textContent = `${playerName} disconnected`;
+  $('kick-modal-sub').textContent = 'Waiting 60 seconds for them to reconnect…';
+  $('kick-modal').style.display = 'flex';
+  $('kick-vote-btn').disabled = false;
+  $('kick-vote-btn').textContent = 'Continue without them';
+}
+
+function voteToKick() {
+  if (!kickTarget || !lobby) return;
+  socket.emit('game:voteKick', { code: lobby.code, playerName: kickTarget });
+  $('kick-vote-btn').disabled = true;
+  $('kick-vote-btn').textContent = 'Vote submitted ✓';
+}
+
+function dismissKickModal() {
+  $('kick-modal').style.display = 'none';
+}
+
 // ── Socket events ──────────────────────────────────────────────────────────
-socket.on('connect', () => { me.id = socket.id; });
+socket.on('connect', () => {
+  me.id = socket.id;
+  // Auto-rejoin if we have saved session data
+  const savedName = sessionStorage.getItem('oot_name');
+  const savedCode = sessionStorage.getItem('oot_code');
+  if (savedName && savedCode) {
+    socket.emit('lobby:rejoin', { name: savedName, code: savedCode });
+  }
+});
 
 socket.on('lobby:joined', ({ code, playerId }) => {
   me.id = playerId;
   me.code = code;
+  sessionStorage.setItem('oot_code', code);
   showScreen('lobby');
 });
 
@@ -740,8 +788,35 @@ socket.on('game:aborted', ({ reason }) => {
   setTimeout(() => showScreen('lobby'), 2500);
 });
 
-socket.on('player:left', ({ name }) => {
-  toast(`${name} disconnected`);
+socket.on('player:left', ({ name, reconnecting }) => {
+  if (reconnecting) {
+    // Show kick vote modal during active game
+    const inGame = lobby && ['reveal', 'statement', 'discussion', 'vote'].includes(lobby.state);
+    if (inGame) {
+      showKickModal(name);
+    } else {
+      toast(`${name} disconnected — waiting for them to rejoin…`);
+    }
+  } else {
+    $('kick-modal').style.display = 'none';
+    toast(`${name} left the game`);
+  }
+});
+
+socket.on('player:rejoin', ({ name }) => {
+  $('kick-modal').style.display = 'none';
+  kickTarget = null;
+  toast(`${name} rejoined!`);
+});
+
+socket.on('game:kickVoteUpdate', ({ playerName, voteCount, votesNeeded }) => {
+  $('kick-vote-count').textContent = `${voteCount} / ${votesNeeded} voted to continue`;
+});
+
+socket.on('game:kickConfirmed', ({ playerName }) => {
+  $('kick-modal').style.display = 'none';
+  kickTarget = null;
+  toast(`Continuing without ${playerName}`);
 });
 
 socket.on('error', (msg) => {
