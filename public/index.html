@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -689,9 +688,8 @@ socket.on('lobby:update', (data) => {
 });
 
 socket.on('game:role', ({ isImpostor, rating, teammates, hint }) => {
-  // Clear any old hint elements
-  const oldHint = $('role-content').querySelector('.hint-el');
-  if (oldHint) oldHint.remove();
+  // Clear any old hint elements regardless of role
+  document.querySelectorAll('.hint-el').forEach(el => el.remove());
   me.isImpostor = isImpostor;
   me.rating = rating;
   $('role-title').textContent = isImpostor ? 'Impostor' : 'Crewmate';
@@ -702,6 +700,7 @@ socket.on('game:role', ({ isImpostor, rating, teammates, hint }) => {
     $('role-sub').textContent = subText;
     if (hint) {
       const hintEl = document.createElement('div');
+      hintEl.className = 'hint-el';
       hintEl.style.cssText = 'margin-top:12px;background:#1a1a2e;border:1.5px solid #7c3aed;border-radius:10px;padding:10px 14px;font-size:13px;color:#a78bfa;';
       hintEl.innerHTML = `💡 Hint: ${hint}`;
       $('role-content').appendChild(hintEl);
